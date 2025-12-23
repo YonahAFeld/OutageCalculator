@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from dotenv import load_dotenv
-load_dotenv()
 
 import sys
 from pathlib import Path
 
 import streamlit as st
-
 
 def _ensure_project_root_on_path() -> None:
     """
