@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 from dotenv import load_dotenv
 load_dotenv()
-from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -32,9 +33,112 @@ from app.ui.state import (
     get_results,
 )
 
+# Backward/forward compatibility: some versions expose additional helpers.
+try:
+    from app.ui.state import get_presto_events  # type: ignore
+except Exception:
+    get_presto_events = None  # type: ignore
+
 # -------------------------------------------------------------------
-# Page config
+# Status checks
 # -------------------------------------------------------------------
+
+def _has_site() -> bool:
+    try:
+        site = get_site()
+    except Exception:
+        site = st.session_state.get("site")
+    return bool(isinstance(site, dict) and site)
+
+
+def _has_outage_events() -> bool:
+    # Prefer a dedicated getter if present
+    if callable(get_presto_events):
+        try:
+            ev = get_presto_events()
+            if ev:
+                return True
+        except Exception:
+            pass
+
+    try:
+        payload = get_outage_events()
+    except Exception:
+        payload = st.session_state.get("outage_events")
+
+    if payload is None:
+        return False
+
+    # Legacy: list of events
+    if isinstance(payload, list):
+        return len(payload) > 0
+
+    if isinstance(payload, dict):
+        # Newer: events_tidy
+        tidy = payload.get("events_tidy")
+        if isinstance(tidy, list) and len(tidy) > 0:
+            return True
+
+        # Newer: nested results.events
+        results = payload.get("results")
+        if isinstance(results, dict):
+            for k in ("events", "interruptions", "outages"):
+                v = results.get(k)
+                if isinstance(v, list) and len(v) > 0:
+                    return True
+
+        # Some older shapes stored events at top-level
+        for k in ("events", "interruptions", "outages"):
+            v = payload.get(k)
+            if isinstance(v, list) and len(v) > 0:
+                return True
+
+    return False
+
+
+def _has_cdf_inputs() -> bool:
+    try:
+        cdf = get_cdf_inputs()
+    except Exception:
+        cdf = st.session_state.get("cdf_inputs")
+
+    # Accept either a dict payload or a truthy object
+    if cdf is None:
+        return False
+    if isinstance(cdf, dict):
+        return bool(cdf)
+    return True
+
+
+def _has_results() -> bool:
+    # Prefer canonical getter
+    try:
+        res = get_results()
+    except Exception:
+        res = None
+
+    if res is not None:
+        # get_results may return dict/list; any non-empty is considered ready
+        if isinstance(res, dict):
+            return bool(res)
+        if isinstance(res, list):
+            return len(res) > 0
+        return True
+
+    # Fallback: check common session_state keys used across iterations
+    for k in ("results", "cdf_results", "results_payload", "analysis_results"):
+        v = st.session_state.get(k)
+        if v is None:
+            continue
+        if isinstance(v, dict) and v:
+            return True
+        if isinstance(v, list) and len(v) > 0:
+            return True
+        if not isinstance(v, (dict, list)):
+            return True
+
+    return False
+
 st.set_page_config(
     page_title="Outage Cost Impact Tool",
     page_icon="⚡",
@@ -74,10 +178,10 @@ Use the navigation on the left to get started.
 st.divider()
 st.subheader("Progress")
 
-site_defined = bool(get_site())
-outages_generated = get_outage_events() is not None
-costs_defined = bool(get_cdf_inputs())
-results_ready = get_results() is not None
+site_defined = _has_site()
+outages_generated = _has_outage_events()
+costs_defined = _has_cdf_inputs()
+results_ready = _has_results()
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -85,7 +189,7 @@ with col1:
     st.metric("Site defined", "Yes" if site_defined else "No")
 
 with col2:
-    st.metric("Outages simulated", "Yes" if outages_generated else "No")
+    st.metric("Outages loaded", "Yes" if outages_generated else "No")
 
 with col3:
     st.metric("Costs defined", "Yes" if costs_defined else "No")
