@@ -376,6 +376,7 @@ with st.form("site_form", clear_on_submit=False):
         max_value=100,
         value=int(existing.get("analysis_period_years", 20)),
         step=1,
+        help="How many years into the future you want to evaluate outage risk and costs. This sets the planning horizon for the entire analysis. Longer periods capture more long-term outage risk and are typical for infrastructure decisions (e.g., 20–25 years).",
         key="site_analysis_period_years",
     )
 
@@ -385,7 +386,7 @@ with st.form("site_form", clear_on_submit=False):
         max_value=30.0,
         value=float(existing.get("discount_rate_nominal", 7.0)),
         step=0.5,
-        help="The discount rate is a financial number used to convert future costs and benefits into an equivalent present value. Often times the discount rate is just the cost of borrowing money, sometimes called the cost of capital. This is because, if the cost of borrowing is 10%, then you can make money by borrowing today on any project which offers at least a 10% return.",
+        help="Used to convert future outage costs into today’s dollars. A higher discount rate makes future outages matter less; a lower rate makes long-term risk matter more. This does not affect outage frequency or duration—only how future costs are valued.",
         key="site_discount_rate_nominal",
     )
 
